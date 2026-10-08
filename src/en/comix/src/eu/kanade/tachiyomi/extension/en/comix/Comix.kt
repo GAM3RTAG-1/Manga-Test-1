@@ -730,10 +730,14 @@ abstract class Comix :
 
     private fun buildPages(response: ChapterResponse): List<Page> {
         val pages = response.result.pages
-        val base = pages.baseUrl.trimEnd('/')
+        val base = pages.baseUrl?.trimEnd('/').orEmpty()
 
         return pages.items.mapIndexed { index, img ->
-            val full = if (img.url.startsWith("http")) img.url else "$base/${img.url.trimStart('/')}"
+            val full = when {
+                img.url.startsWith("http") -> img.url
+                base.isNotEmpty() -> "$base/${img.url.trimStart('/')}"
+                else -> throw Exception("Chapter pages have no base URL; the site API may have changed")
+            }
             // V3 pages need the query flag so the server returns grid-scramble headers.
             // Legacy byte-XOR pages: add #scrambled so imageRequest keeps Origin for x-enc-seed
             val isV3 = img.s == 1 || full.contains("?v3")
