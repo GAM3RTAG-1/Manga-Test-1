@@ -532,20 +532,53 @@ abstract class Comix :
                                 const mainResponse = await fetch(mainScriptUrl);
                                 if (!mainResponse.ok) throw new Error('Could not load main bundle');
                                 const mainJavaScript = await mainResponse.text();
-                                const environmentFile = mainJavaScript.match(
-                                    /from\s*["']\.\/(env-[^"']+\.js)["']/
-                                )?.[1];
-                                if (!environmentFile) throw new Error('Could not find environment bundle');
-
                                 const importBundle = new Function('url', 'return import(url)');
-                                const environment = await importBundle(
-                                    new URL(environmentFile, mainScriptUrl).href
-                                );
-                                const mangaApi = Object.values(environment).find(value =>
-                                    value &&
-                                    typeof value === 'object' &&
-                                    typeof value.chapters === 'function'
-                                );
+                                const importPattern = /import\s*\{([^}]*)\}\s*from\s*["']\.\/([^"']+\.js)["']/g;
+                                const bindings = new Map();
+                                for (const match of mainJavaScript.matchAll(importPattern)) {
+                                    for (const part of match[1].split(',')) {
+                                        const [exported, local] = part.trim().split(/\s+as\s+/);
+                                        if (exported) bindings.set(local || exported, { file: match[2], exported });
+                                    }
+                                }
+                                const targets = [];
+                                for (const match of mainJavaScript.matchAll(/([A-Za-z_$][\w$]*)\.chapters\(/g)) {
+                                    const binding = bindings.get(match[1]);
+                                    if (binding && !targets.some(t => t.file === binding.file && t.exported === binding.exported)) {
+                                        targets.push(binding);
+                                    }
+                                }
+
+                                let mangaApi = null;
+                                for (const { file, exported } of targets) {
+                                    try {
+                                        const chunk = await importBundle(new URL(file, mainScriptUrl).href);
+                                        const value = chunk[exported];
+                                        if (value && typeof value.chapters === 'function') {
+                                            mangaApi = value;
+                                            break;
+                                        }
+                                    } catch (e) {}
+                                }
+                                if (!mangaApi) {
+                                    const chunkFiles = new Set(
+                                        Array.from(
+                                            mainJavaScript.matchAll(/from\s*["']\.\/([^"']+\.js)["']/g),
+                                            match => match[1]
+                                        )
+                                    );
+                                    for (const file of chunkFiles) {
+                                        try {
+                                            const chunk = await importBundle(new URL(file, mainScriptUrl).href);
+                                            mangaApi = Object.values(chunk).find(value =>
+                                                value &&
+                                                typeof value === 'object' &&
+                                                typeof value.chapters === 'function'
+                                            );
+                                            if (mangaApi) break;
+                                        } catch (e) {}
+                                    }
+                                }
                                 if (!mangaApi) throw new Error('Could not find manga API');
 
                                 const items = [];
