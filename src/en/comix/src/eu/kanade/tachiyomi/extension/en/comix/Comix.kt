@@ -628,10 +628,8 @@ abstract class Comix :
             }
         }
         val chapterItems = decoded.parseAs<ChapterDetailsResponse>().result.items
-        throw Exception(
-            "DEBUG CHAPTER DATA: " +
-                decoded.toString().take(2500),
-        )
+        throw Exception("DEBUG CHAPTER DATA: $decoded")
+            
     }
 
     private fun selectChapters(
