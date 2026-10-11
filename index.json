@@ -1,0 +1,37 @@
+{
+  "name": "My Extensions",
+  "badgeLabel": "ME",
+  "signingKey": "9b484d4e259f19f8e5349b7c3e8853e99ee8def2232f4dd135cd83356917bca9",
+  "contact": {
+    "website": "https://gam3rtag-1.github.io/Manga-Test-1"
+  },
+  "extensionList": {
+    "extensions": [
+      {
+        "name": "Comix",
+        "packageName": "eu.kanade.tachiyomi.extension.en.comix",
+        "resources": {
+          "apkUrl": "https://gam3rtag-1.github.io/Manga-Test-1/apk/tachiyomi-en.comix-v1.6.48.apk",
+          "iconUrl": "https://gam3rtag-1.github.io/Manga-Test-1/icon/eu.kanade.tachiyomi.extension.en.comix.png",
+          "jarUrl": "https://gam3rtag-1.github.io/Manga-Test-1/apk/tachiyomi-en.comix-v1.6.48.jar"
+        },
+        "extensionLib": "1.6",
+        "versionCode": "106048",
+        "versionName": "1.6.48",
+        "contentWarning": "CONTENT_WARNING_MIXED",
+        "sources": [
+          {
+            "id": "7537715367149829912",
+            "name": "Comix",
+            "language": "en",
+            "homeUrl": "https://comix.to",
+            "mirrorUrls": [
+              "https://comix.to",
+              "https://comix.ws"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
