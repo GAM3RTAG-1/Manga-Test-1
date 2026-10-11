@@ -1,3 +1,4 @@
+```kotlin
 package eu.kanade.tachiyomi.extension.en.comix
 
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -151,6 +152,7 @@ class Manga(
                 }
             }
         }
+
         initialized = true
         status = when (this@Manga.status) {
             "releasing" -> SManga.ONGOING
@@ -172,7 +174,9 @@ class Manga(
 
     private fun buildExtraInfo(): List<String> = buildList {
         year?.takeIf { it > 0 }?.let { add("**Year**: $it") }
-        originalLanguage?.takeIf { it.isNotBlank() }?.let { add("**Language**: ${it.uppercase()}") }
+        originalLanguage?.takeIf { it.isNotBlank() }?.let {
+            add("**Language**: ${it.uppercase()}")
+        }
         contentRating.takeIf { it.isNotBlank() }?.let {
             add("**Content rating**: ${it.replaceFirstChar(Char::uppercase)}")
         }
@@ -191,14 +195,17 @@ class Manga(
             "mb" to "MangaBaka",
         )
         val knownLinks = siteNames.mapNotNull { (key, name) ->
-            val url = linkMap[key]?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val url = linkMap[key]?.takeIf { it.isNotBlank() }
+                ?: return@mapNotNull null
             "[$name]($url)"
         }
-        val unknownLinks = linkMap.filterKeys { k -> siteNames.none { it.first == k } }
-            .mapNotNull { (key, url) ->
-                val validUrl = url?.takeIf { it.startsWith("http") } ?: return@mapNotNull null
-                "[${key.uppercase()}]($validUrl)"
-            }
+        val unknownLinks = linkMap.filterKeys { k ->
+            siteNames.none { it.first == k }
+        }.mapNotNull { (key, url) ->
+            val validUrl = url?.takeIf { it.startsWith("http") }
+                ?: return@mapNotNull null
+            "[${key.uppercase()}]($validUrl)"
+        }
         return knownLinks + unknownLinks
     }
 
@@ -213,7 +220,9 @@ class Manga(
         (genres ?: genreOld)?.map { it.title }?.let { addAll(it) }
         (demographics ?: demographicOld)?.map { it.title }?.let { addAll(it) }
         if (showTags) tags?.map { it.title }?.let { addAll(it) }
-        if (contentRating == "erotica" || contentRating == "pornographic") add("NSFW")
+        if (contentRating == "erotica" || contentRating == "pornographic") {
+            add("NSFW")
+        }
     }.distinct().joinToString()
 }
 
@@ -281,7 +290,7 @@ class ChapterDetailsResponse(
 class Chapter(
     val id: Int,
     val url: String = "",
-    val number: Double,
+    val number: Double = 0.0,
     private val name: String = "",
     val votes: Int = 0,
     private val createdAtFormatted: String = "",
@@ -295,7 +304,9 @@ class Chapter(
     )
 
     companion object {
-        private val DATE_REGEX = Regex("""^(\d+)\s*(s|m|h|d|w|mo|mos|y|yr|yrs|min|mins|sec|secs|hr|hrs|day|days|week|weeks|month|months|year|years)$""")
+        private val DATE_REGEX = Regex(
+            """^(\d+)\s*(s|m|h|d|w|mo|mos|y|yr|yrs|min|mins|sec|secs|hr|hrs|day|days|week|weeks|month|months|year|years)$""",
+        )
     }
 
     fun toSChapter(mangaSlug: String) = SChapter.create().apply {
@@ -306,19 +317,24 @@ class Chapter(
                 "title/$mangaSlug/$id-chapter-${number.toString().removeSuffix(".0")}"
             }
         }
+
         memo = buildJsonObject {
             put(CHAPTER_ID_MEMO, id)
             put(CHAPTER_VOTES_MEMO, votes)
             put(CHAPTER_OFFICIAL_MEMO, isOfficial)
             group?.id?.let { put(CHAPTER_GROUP_ID_MEMO, it) }
         }
+
         name = buildString {
             append("Chapter ")
             append(this@Chapter.number.toString().removeSuffix(".0"))
-            this@Chapter.name.takeUnless { it.isEmpty() }?.let { append(": $it") }
+            this@Chapter.name.takeUnless { it.isEmpty() }
+                ?.let { append(": $it") }
         }
+
         date_upload = parseRelativeDate(this@Chapter.createdAtFormatted)
         chapter_number = this@Chapter.number.toFloat()
+
         scanlator = if (this@Chapter.group != null) {
             this@Chapter.group.name
         } else if (this@Chapter.isOfficial) {
@@ -330,6 +346,7 @@ class Chapter(
 
     private fun parseRelativeDate(dateStr: String): Long {
         if (dateStr.isEmpty()) return 0L
+
         val trimmed = dateStr.trim().lowercase().removeSuffix(" ago")
         val match = DATE_REGEX.find(trimmed) ?: return 0L
 
@@ -371,3 +388,4 @@ class ChapterResponse(
         val s: Int = 0,
     )
 }
+```
