@@ -532,6 +532,50 @@ abstract class Comix :
                                 const mainResponse = await fetch(mainScriptUrl);
                                 if (!mainResponse.ok) throw new Error('Could not load main bundle');
                                 const mainJavaScript = await mainResponse.text();
+                                const chapterPages = new Map();
+                                const isChapterRequest = url => {
+                                    try {
+                                        return /^\/api\/v1\/manga\/[^/]+\/chapters\/?$/.test(
+                                            new URL(url, location.href).pathname
+                                        );
+                                    } catch (e) {
+                                        return false;
+                                    }
+                                };
+                                const recordChapterResponse = (url, body) => {
+                                    try {
+                                        if (!isChapterRequest(url)) return;
+                                        const result = JSON.parse(body)?.result;
+                                        if (!result || !Array.isArray(result.items)) return;
+                                        const page = Number(new URL(url, location.href).searchParams.get('page')) || 1;
+                                        chapterPages.set(page, result);
+                                    } catch (e) {}
+                                };
+                                const originalOpen = XMLHttpRequest.prototype.open;
+                                XMLHttpRequest.prototype.open = function (method, url) {
+                                    this.addEventListener('load', () => {
+                                        try {
+                                            const body = typeof this.response === 'string'
+                                                ? this.response
+                                                : (this.response ? JSON.stringify(this.response) : '');
+                                            recordChapterResponse(url, body);
+                                        } catch (e) {}
+                                    });
+                                    return originalOpen.apply(this, arguments);
+                                };
+                                const originalFetch = window.fetch.bind(window);
+                                window.fetch = function (input) {
+                                    const url = typeof input === 'string' ? input : ((input && input.url) || String(input));
+                                    const promise = originalFetch.apply(window, arguments);
+                                    if (isChapterRequest(url)) {
+                                        promise
+                                            .then(response => response.clone().text())
+                                            .then(body => recordChapterResponse(url, body))
+                                            .catch(() => {});
+                                    }
+                                    return promise;
+                                };
+
                                 const importBundle = new Function('url', 'return import(url)');
                                 const importPattern = /import\s*\{([^}]*)\}\s*from\s*["']\.\/([^"']+\.js)["']/g;
                                 const bindings = new Map();
@@ -541,26 +585,31 @@ abstract class Comix :
                                         if (exported) bindings.set(local || exported, { file: match[2], exported });
                                     }
                                 }
-                                const targets = [];
+
+                                const candidates = [];
+                                const chapterCall = mainJavaScript.match(
+                                    /group_id:[\w$]+\}:\{\}[\s\S]{0,400}?queryFn:\(\)=>([\w$]+)\.([\w$]+)\(/
+                                );
+                                if (chapterCall && bindings.has(chapterCall[1])) {
+                                    candidates.push({ ...bindings.get(chapterCall[1]), method: chapterCall[2] });
+                                }
                                 for (const match of mainJavaScript.matchAll(/([A-Za-z_$][\w$]*)\.chapters\(/g)) {
                                     const binding = bindings.get(match[1]);
-                                    if (binding && !targets.some(t => t.file === binding.file && t.exported === binding.exported)) {
-                                        targets.push(binding);
-                                    }
+                                    if (binding) candidates.push({ ...binding, method: 'chapters' });
                                 }
 
-                                let mangaApi = null;
-                                for (const { file, exported } of targets) {
+                                let callChapters = null;
+                                for (const { file, exported, method } of candidates) {
                                     try {
                                         const chunk = await importBundle(new URL(file, mainScriptUrl).href);
-                                        const value = chunk[exported];
-                                        if (value && typeof value.chapters === 'function') {
-                                            mangaApi = value;
+                                        const api = chunk[exported];
+                                        if (api && typeof api[method] === 'function') {
+                                            callChapters = params => api[method](mangaId, params);
                                             break;
                                         }
                                     } catch (e) {}
                                 }
-                                if (!mangaApi) {
+                                if (!callChapters) {
                                     const chunkFiles = new Set(
                                         Array.from(
                                             mainJavaScript.matchAll(/from\s*["']\.\/([^"']+\.js)["']/g),
@@ -570,32 +619,44 @@ abstract class Comix :
                                     for (const file of chunkFiles) {
                                         try {
                                             const chunk = await importBundle(new URL(file, mainScriptUrl).href);
-                                            mangaApi = Object.values(chunk).find(value =>
+                                            const api = Object.values(chunk).find(value =>
                                                 value &&
                                                 typeof value === 'object' &&
                                                 typeof value.chapters === 'function'
                                             );
-                                            if (mangaApi) break;
+                                            if (api) {
+                                                callChapters = params => api.chapters(mangaId, params);
+                                                break;
+                                            }
                                         } catch (e) {}
                                     }
                                 }
-                                if (!mangaApi) throw new Error('Could not find manga API');
+                                if (!callChapters) throw new Error('Could not find manga API');
 
                                 const items = [];
                                 let page = 1;
                                 while (page <= $${MAX_CHAPTER_PAGES}) {
-                                    const response = await mangaApi.chapters(mangaId, {
+                                    chapterPages.delete(page);
+                                    await callChapters({
                                         page,
                                         limit: 100,
                                         order: { number: 'desc' }
                                     });
-                                    const pageItems = response?.items;
+                                    for (let wait = 0; wait < 30 && !chapterPages.has(page); wait++) {
+                                        await new Promise(resolve => setTimeout(resolve, 100));
+                                    }
+                                    const result = chapterPages.get(page);
+                                    if (!result) {
+                                        if (page === 1) throw new Error('Could not read chapter response');
+                                        break;
+                                    }
+                                    const pageItems = result.items;
                                     if (!Array.isArray(pageItems) || pageItems.length === 0) break;
 
                                     items.push(...pageItems);
                                     if (pageItems.some(item => item.id === latestChapterId)) break;
 
-                                    const meta = response.meta || response.pagination || {};
+                                    const meta = result.meta || result.pagination || {};
                                     const lastPage = meta.lastPage || meta.last_page || page;
                                     if (!(meta.hasNext || page < lastPage)) break;
                                     page++;
