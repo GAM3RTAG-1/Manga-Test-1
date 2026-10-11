@@ -581,11 +581,16 @@ abstract class Comix :
 
     private fun decodeChapterPage(body: String, currentCipher: ComixCipher?): List<Chapter> {
         val root = body.parseAs<JsonElement>()
-        val decoded: JsonElement = if (root is JsonObject && "e" in root) {
+        var decoded: JsonElement = if (root is JsonObject && "e" in root) {
             val activeCipher = currentCipher ?: throw Exception("Could not read chapter response")
             activeCipher.decrypt(root.parseAs<EncryptedResponse>().e).parseAs<JsonElement>()
         } else {
             root
+        }
+        if (decoded is JsonObject && "result" !in decoded && "items" in decoded) {
+            decoded = buildJsonObject {
+                put("result", decoded)
+            }
         }
         return decoded.parseAs<ChapterDetailsResponse>().result.items
     }
