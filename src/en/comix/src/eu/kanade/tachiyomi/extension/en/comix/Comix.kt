@@ -627,8 +627,16 @@ abstract class Comix :
                 put("result", decoded)
             }
         }
-        val chapterItems = decoded.parseAs<ChapterDetailsResponse>().result.items
-        throw Exception("DEBUG FIRST CHAPTER: " + decoded.toString().substringAfter("\"items\":").take(800))
+       val json = kotlinx.serialization.json.Json.parseToJsonElement(decoded.toString())    
+       val items = json.jsonObject["result"]
+           ?.jsonObject?.get("items")
+           ?.jsonArray
+
+       throw Exception(
+           "DEBUG FIRST CHAPTER: " +
+               (items?.firstOrNull()?.toString() ?: "No chapter items found"),
+)
+
     }
 
     private fun selectChapters(
