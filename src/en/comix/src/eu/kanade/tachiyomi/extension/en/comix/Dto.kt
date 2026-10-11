@@ -311,20 +311,21 @@ class Chapter(
     }
 
     fun toSChapter(mangaSlug: String) = SChapter.create().apply {
+        val urlNumber = Regex("""-chapter-([0-9]+(?:\.[0-9]+)?)""")
+            .find(this@Chapter.url)
+            ?.groupValues
+            ?.get(1)
+            ?.toDoubleOrNull()
+
         val actualNumber = if (this@Chapter.number != 0.0) {
             this@Chapter.number
         } else {
-            Regex("""-chapter-([0-9]+(?:\.[0-9]+)?)""")
-                .find(this@Chapter.url)
-                ?.groupValues
-                ?.get(1)
-                ?.toDoubleOrNull()
-                ?: this@Chapter.number
+            urlNumber ?: 0.0
         }
 
-        url = this@Chapter.url.indexOf("/title/").let { index ->
-            if (index != -1) {
-                this@Chapter.url.substring(index + 1)
+        url = this@Chapter.url.substringAfter("/title/", "").let { path ->
+            if (path.isNotEmpty()) {
+                path
             } else {
                 "title/$mangaSlug/$id-chapter-${actualNumber.toString().removeSuffix(".0")}"
             }
@@ -347,12 +348,10 @@ class Chapter(
         date_upload = parseRelativeDate(this@Chapter.createdAtFormatted)
         chapter_number = actualNumber.toFloat()
 
-        scanlator = if (this@Chapter.group != null) {
-            this@Chapter.group.name
-        } else if (this@Chapter.isOfficial) {
-            "Official"
-        } else {
-            "Unknown"
+        scanlator = when {
+            this@Chapter.group != null -> this@Chapter.group.name
+            this@Chapter.isOfficial -> "Official"
+            else -> "Unknown"
         }
     }
 
