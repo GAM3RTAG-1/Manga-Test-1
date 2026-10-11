@@ -1,3 +1,4 @@
+
 package eu.kanade.tachiyomi.extension.en.comix
 
 import eu.kanade.tachiyomi.source.model.SChapter
@@ -90,8 +91,8 @@ class Manga(
             }
 
             return buildString {
-                append("★".repeat(stars))
-                if (stars < 5) append("☆".repeat(5 - stars))
+                append("★".repeat(stars.coerceIn(0, 5)))
+                if (stars < 5) append("☆".repeat(5 - stars.coerceIn(0, 5)))
                 append(" $scoreString")
             }
         }
@@ -112,6 +113,7 @@ class Manga(
 
         author = actualAuthors?.joinToString { it.title }
         artist = actualArtists?.joinToString { it.title }
+
         description = buildString {
             if (scorePosition == "top") {
                 fancyScore.takeIf { it.isNotEmpty() }?.let {
@@ -304,7 +306,7 @@ class Chapter(
 
     companion object {
         private val DATE_REGEX = Regex(
-            """^(\d+)\s*(s|m|h|d|w|mo|mos|y|yr|yrs|min|mins|sec|secs|hr|hrs|day|days|week|weeks|month|months|year|years)$""",
+            """^(\d+)\s+(s|m|h|d|w|mo|mos|y|yr|yrs|min|mins|sec|secs|hr|hrs|day|days|week|weeks|month|months|year|years)$""",
         )
     }
 
@@ -387,4 +389,3 @@ class ChapterResponse(
         val s: Int = 0,
     )
 }
-```
