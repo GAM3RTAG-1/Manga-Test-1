@@ -518,8 +518,21 @@ abstract class Comix :
                             window.$$passPayloadName(window[payloadKey]);
                             return window[payloadKey];
                         }
-                        if (window.__comixChapterCaptureInstalled) return null;
-                        window.__comixChapterCaptureInstalled = true;
+
+                        const finish = parsed => {
+                            try {
+                                if (parsed && Array.isArray(parsed.items)) {
+                                    parsed = { result: parsed };
+                                }
+                                if (parsed && parsed.result && Array.isArray(parsed.result.items)) {
+                                    const json = JSON.stringify(parsed);
+                                    window[payloadKey] = json;
+                                    window.$$passPayloadName(json);
+                                    return true;
+                                }
+                            } catch (e) {}
+                            return false;
+                        };
 
                         const isChapterRequest = url => {
                             try {
@@ -530,43 +543,65 @@ abstract class Comix :
                                 return false;
                             }
                         };
-                        const recordChapterResponse = (url, body) => {
-                            try {
-                                if (!isChapterRequest(url) || typeof body !== 'string' || !body) return;
-                                if (!window[payloadKey]) {
-                                    window[payloadKey] = body;
-                                    window.$$passPayloadName(body);
-                                }
-                            } catch (e) {}
-                        };
 
-                        const originalOpen = XMLHttpRequest.prototype.open;
-                        XMLHttpRequest.prototype.open = function (method, url) {
-                            this.addEventListener('load', () => {
+                        if (!window.__comixChapterCaptureInstalled) {
+                            window.__comixChapterCaptureInstalled = true;
+                            window.__comixAwaitingChapterDecrypt = false;
+
+                            const handleBody = (url, body) => {
                                 try {
-                                    const body = typeof this.response === 'string'
-                                        ? this.response
-                                        : (this.response ? JSON.stringify(this.response) : '');
-                                    recordChapterResponse(url, body);
+                                    if (!isChapterRequest(url) || typeof body !== 'string' || !body) return;
+                                    const parsed = JSON.parse(body);
+                                    if (parsed && typeof parsed === 'object' && 'e' in parsed) {
+                                        window.__comixAwaitingChapterDecrypt = true;
+                                    } else {
+                                        finish(parsed);
+                                    }
                                 } catch (e) {}
+                            };
+
+                            const originalOpen = XMLHttpRequest.prototype.open;
+                            XMLHttpRequest.prototype.open = function (method, url) {
+                                this.addEventListener('load', () => {
+                                    try {
+                                        const body = typeof this.response === 'string'
+                                            ? this.response
+                                            : (this.response ? JSON.stringify(this.response) : '');
+                                        handleBody(url, body);
+                                    } catch (e) {}
+                                });
+                                return originalOpen.apply(this, arguments);
+                            };
+
+                            const originalFetch = window.fetch.bind(window);
+                            window.fetch = function (input) {
+                                const url = typeof input === 'string' ? input : ((input && input.url) || String(input));
+                                const promise = originalFetch.apply(window, arguments);
+                                if (isChapterRequest(url)) {
+                                    promise
+                                        .then(response => response.clone().text())
+                                        .then(body => handleBody(url, body))
+                                        .catch(() => {});
+                                }
+                                return promise;
+                            };
+
+                            const originalParse = JSON.parse;
+                            const proxiedParse = new Proxy(originalParse, {
+                                apply(target, thisArg, args) {
+                                    const parsed = Reflect.apply(target, thisArg, args);
+                                    if (window.__comixAwaitingChapterDecrypt && !window[payloadKey]) {
+                                        if (finish(parsed)) {
+                                            window.__comixAwaitingChapterDecrypt = false;
+                                        }
+                                    }
+                                    return parsed;
+                                }
                             });
-                            return originalOpen.apply(this, arguments);
-                        };
+                            JSON.parse = proxiedParse;
+                        }
 
-                        const originalFetch = window.fetch.bind(window);
-                        window.fetch = function (input) {
-                            const url = typeof input === 'string' ? input : ((input && input.url) || String(input));
-                            const promise = originalFetch.apply(window, arguments);
-                            if (isChapterRequest(url)) {
-                                promise
-                                    .then(response => response.clone().text())
-                                    .then(body => recordChapterResponse(url, body))
-                                    .catch(() => {});
-                            }
-                            return promise;
-                        };
-
-                        return null;
+                        return window[payloadKey] || null;
                     })();
                 """.trimIndent()
             },
