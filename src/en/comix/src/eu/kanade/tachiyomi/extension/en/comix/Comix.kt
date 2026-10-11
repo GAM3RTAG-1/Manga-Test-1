@@ -532,7 +532,7 @@ abstract class Comix :
                                 const mainResponse = await fetch(mainScriptUrl);
                                 if (!mainResponse.ok) throw new Error('Could not load main bundle');
                                 const mainJavaScript = await mainResponse.text();
-                                const chapterPages = new Map();
+                                let chapterBody = null;
                                 const isChapterRequest = url => {
                                     try {
                                         return /^\/api\/v1\/manga\/[^/]+\/chapters\/?$/.test(
@@ -544,11 +544,8 @@ abstract class Comix :
                                 };
                                 const recordChapterResponse = (url, body) => {
                                     try {
-                                        if (!isChapterRequest(url)) return;
-                                        const result = JSON.parse(body)?.result;
-                                        if (!result || !Array.isArray(result.items)) return;
-                                        const page = Number(new URL(url, location.href).searchParams.get('page')) || 1;
-                                        chapterPages.set(page, result);
+                                        if (!isChapterRequest(url) || typeof body !== 'string' || !body) return;
+                                        if (chapterBody === null) chapterBody = body;
                                     } catch (e) {}
                                 };
                                 const originalOpen = XMLHttpRequest.prototype.open;
@@ -633,35 +630,12 @@ abstract class Comix :
                                 }
                                 if (!callChapters) throw new Error('Could not find manga API');
 
-                                const items = [];
-                                let page = 1;
-                                while (page <= $${MAX_CHAPTER_PAGES}) {
-                                    chapterPages.delete(page);
-                                    await callChapters({
-                                        page,
-                                        limit: 100,
-                                        order: { number: 'desc' }
-                                    });
-                                    for (let wait = 0; wait < 30 && !chapterPages.has(page); wait++) {
-                                        await new Promise(resolve => setTimeout(resolve, 100));
-                                    }
-                                    const result = chapterPages.get(page);
-                                    if (!result) {
-                                        if (page === 1) throw new Error('Could not read chapter response');
-                                        break;
-                                    }
-                                    const pageItems = result.items;
-                                    if (!Array.isArray(pageItems) || pageItems.length === 0) break;
-
-                                    items.push(...pageItems);
-                                    if (pageItems.some(item => item.id === latestChapterId)) break;
-
-                                    const meta = result.meta || result.pagination || {};
-                                    const lastPage = meta.lastPage || meta.last_page || page;
-                                    if (!(meta.hasNext || page < lastPage)) break;
-                                    page++;
+                                await callChapters({ page: 1, limit: 100, order: { number: 'desc' } });
+                                for (let wait = 0; wait < 150 && chapterBody === null; wait++) {
+                                    await new Promise(resolve => setTimeout(resolve, 100));
                                 }
-                                window.$${passPayloadName}(JSON.stringify(items));
+                                if (chapterBody === null) throw new Error('Could not read chapter response');
+                                window.$${passPayloadName}(chapterBody);
                             } catch (error) {
                                 window.$${rejectName}(error);
                             }
@@ -672,7 +646,22 @@ abstract class Comix :
             },
         )
 
-        return payload.parseAs<List<Chapter>>().map { it.toSChapter(mangaSlug) }
+        val capturedCipher = cipher
+        if (capturedCipher != null) {
+            getNativeChapterList(manga, latestChapterId)?.let { return it }
+        }
+        return decodeChapterPage(payload, capturedCipher).map { it.toSChapter(mangaSlug) }
+    }
+
+    private fun decodeChapterPage(body: String, currentCipher: ComixCipher?): List<Chapter> {
+        val root = body.parseAs<JsonElement>()
+        val decoded: JsonElement = if (root is JsonObject && "e" in root) {
+            val activeCipher = currentCipher ?: throw Exception("Could not read chapter response")
+            activeCipher.decrypt(root.parseAs<EncryptedResponse>().e).parseAs<JsonElement>()
+        } else {
+            root
+        }
+        return decoded.parseAs<ChapterDetailsResponse>().result.items
     }
 
     private fun selectChapters(
