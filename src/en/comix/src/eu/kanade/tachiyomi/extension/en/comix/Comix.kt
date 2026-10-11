@@ -631,7 +631,7 @@ abstract class Comix :
         throw Exception(
             "DEBUG CHAPTER DATA: " +
                 decoded.toString().take(2500),
-)
+        )
     }
 
     private fun selectChapters(
