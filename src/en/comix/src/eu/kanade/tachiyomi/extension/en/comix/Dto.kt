@@ -1,4 +1,3 @@
-```kotlin
 package eu.kanade.tachiyomi.extension.en.comix
 
 import eu.kanade.tachiyomi.source.model.SChapter
